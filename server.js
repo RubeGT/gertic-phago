@@ -18,7 +18,7 @@ io.on('connection', (socket) => {
         rooms[roomId] = {
             players: [{ id: socket.id, name: username, isHost: true }],
             phase: 'LOBBY',
-            album: [] // Stores the history of the game
+            album: []
         };
         socket.join(roomId);
         socket.emit('room-joined', { roomId, players: rooms[roomId].players });
@@ -27,14 +27,10 @@ io.on('connection', (socket) => {
     socket.on('join-room', ({ roomId, username }) => {
         const room = rooms[roomId];
         if (!room) return socket.emit('error-msg', 'Room not found');
-        
         const newPlayer = { id: socket.id, name: username, isHost: false };
         room.players.push(newPlayer);
         socket.join(roomId);
-        
-        // Tell the new player they joined successfully
         socket.emit('room-joined', { roomId, players: room.players });
-        // Tell everyone else the player list updated
         io.to(roomId).emit('update-players', room.players);
     });
 
@@ -49,42 +45,22 @@ io.on('connection', (socket) => {
     socket.on('submit-data', ({ roomId, data, type }) => {
         const room = rooms[roomId];
         if(!room) return;
-
-        // Record for the album
         const player = room.players.find(p => p.id === socket.id);
         room.album.push({ user: player.name, type, content: data });
 
-        const submissionsThisRound = room.album.filter(a => a.type === type).length;
-        
-        if (submissionsThisRound === room.players.length) {
+        if (room.album.filter(a => a.type === type).length === room.players.length) {
             if (type === 'PROMPT') {
-                advanceToDraw(roomId);
-            } else {
-                // If it was a drawing, show the results
-                io.to(roomId).emit('change-phase', { 
-                    phase: 'RESULTS', 
-                    msg: 'The Grand Reveal!', 
-                    album: room.album 
+                room.players.forEach((p, i) => {
+                    const next = room.players[(i + 1) % room.players.length];
+                    const prompt = room.album.find(a => a.user === p.name).content;
+                    io.to(next.id).emit('change-phase', { phase: 'DRAW', msg: `Draw: ${prompt}` });
                 });
+            } else {
+                io.to(roomId).emit('change-phase', { phase: 'RESULTS', album: room.album });
             }
         }
     });
 });
 
-function advanceToDraw(roomId) {
-    const room = rooms[roomId];
-    room.players.forEach((player, index) => {
-        const nextIdx = (index + 1) % room.players.length;
-        const targetPlayer = room.players[nextIdx];
-        // Find the prompt that was submitted by the "previous" player
-        const promptObj = room.album.find(a => a.user === player.name && a.type === 'PROMPT');
-
-        io.to(targetPlayer.id).emit('change-phase', {
-            phase: 'DRAW',
-            msg: `Draw this: ${promptObj.content}`
-        });
-    });
-}
-
 const PORT = process.env.PORT || 8080;
-server.listen(PORT, '0.0.0.0', () => console.log(`Server live on ${PORT}`));
+server.listen(PORT, '0.0.0.0', () => console.log(`Live on ${PORT}`));
