@@ -2,61 +2,75 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SketchChain Multiplayer</title>
+    <title>SketchLink - Multiplayer</title>
     <style>
-        :root { --bg: #1a1a2e; --panel: #16213e; --accent: #e94560; --text: #e9ecef; }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); color: var(--text); margin: 0; display: flex; height: 100vh; overflow: hidden; }
+        :root { --bg: #0f172a; --card: #1e293b; --accent: #38bdf8; --btn: #0284c7; }
+        body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: white; margin: 0; }
         
-        /* Sidebar */
-        #sidebar { width: 250px; background: var(--panel); border-right: 2px solid #0f3460; padding: 20px; display: flex; flex-direction: column; }
-        .player-card { background: #0f3460; padding: 10px; margin-bottom: 10px; border-radius: 5px; border-left: 4px solid var(--accent); }
-
-        /* Main Area */
-        #main-content { flex-grow: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
-        .screen { display: none; width: 100%; max-width: 700px; text-align: center; }
-        .active { display: block; }
-
-        /* UI Elements */
-        input { padding: 12px; border-radius: 5px; border: none; width: 250px; margin-bottom: 10px; font-size: 16px; }
-        button { padding: 12px 24px; border-radius: 5px; border: none; background: var(--accent); color: white; font-weight: bold; cursor: pointer; transition: 0.2s; }
-        button:hover { opacity: 0.8; transform: translateY(-2px); }
-        button:disabled { background: #555; cursor: not-allowed; }
+        /* Landing Page */
+        .container { max-width: 1000px; margin: 0 auto; padding: 40px; text-align: center; }
+        .hero { margin-top: 10vh; }
+        .card { background: var(--card); padding: 30px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
+        
+        /* Game Layout */
+        #game-layout { display: none; grid-template-columns: 250px 1fr; height: 100vh; }
+        #sidebar { background: #0f172a; border-right: 1px solid #334155; padding: 20px; }
+        #game-zone { display: flex; flex-direction: column; align-items: center; justify-content: center; background: #1e293b; }
 
         /* Canvas */
-        canvas { background: white; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); cursor: crosshair; touch-action: none; }
+        #canvas-wrap { background: white; border-radius: 8px; overflow: hidden; }
+        canvas { cursor: crosshair; touch-action: none; }
+
+        input, button { padding: 12px 20px; border-radius: 8px; border: none; font-size: 16px; margin: 5px; }
+        button { background: var(--btn); color: white; cursor: pointer; font-weight: 600; }
+        .invite-box { background: #000; padding: 10px; font-family: monospace; color: var(--accent); margin: 10px 0; }
     </style>
 </head>
 <body>
 
-<div id="sidebar">
-    <h3>Players</h3>
-    <div id="player-list"></div>
+<!-- LANDING PAGE -->
+<div id="landing" class="container">
+    <div class="hero">
+        <h1>SketchLink</h1>
+        <div class="card" style="max-width: 400px; margin: 0 auto;">
+            <input type="text" id="username" placeholder="Your Name" style="width: 80%"><br>
+            <button onclick="hostGame()">Host New Game</button>
+            <div style="margin: 20px 0; opacity: 0.5;">— OR —</div>
+            <input type="text" id="joinCode" placeholder="Enter Room ID" style="width: 80%"><br>
+            <button onclick="joinGame()" style="background: #334155;">Join Existing</button>
+        </div>
+    </div>
 </div>
 
-<div id="main-content">
-    <!-- Screen 1: Login -->
-    <div id="login-screen" class="screen active">
-        <h1>SketchChain</h1>
-        <p>Enter your nickname to join the lobby</p>
-        <input type="text" id="username" placeholder="SuperPainter4000"><br>
-        <button onclick="joinLobby()">Join Lobby</button>
+<!-- GAME INTERFACE -->
+<div id="game-layout">
+    <div id="sidebar">
+        <h3>Room: <span id="display-room-id">--</span></h3>
+        <div class="invite-box" id="invite-link">Invite players using ID</div>
+        <hr style="border: 0.5px solid #334155">
+        <h4>Players</h4>
+        <div id="player-list"></div>
+        <button id="start-btn" style="display:none; width: 100%; margin-top: 20px;" onclick="requestStart()">Start Game</button>
     </div>
 
-    <!-- Screen 2: Lobby -->
-    <div id="lobby-screen" class="screen">
-        <h1>Waiting Room</h1>
-        <p id="lobby-status">Waiting for host to start...</p>
-        <button id="start-btn" onclick="startGame()" style="display:none;">Start Game</button>
-    </div>
+    <div id="game-zone">
+        <h2 id="phase-instruction">Waiting for lobby...</h2>
+        
+        <!-- Prompt Phase -->
+        <div id="prompt-ui" style="display:none">
+            <input type="text" id="prompt-input" placeholder="Write something funny to draw...">
+            <button onclick="submitPrompt()">Submit</button>
+        </div>
 
-    <!-- Screen 3: Drawing -->
-    <div id="game-screen" class="screen">
-        <h2 id="game-task">Draw: A Scary Cat</h2>
-        <canvas id="paintCanvas" width="600" height="450"></canvas>
-        <div style="margin-top: 15px;">
-            <button onclick="clearCanvas()" style="background:#555">Clear</button>
-            <button onclick="submitTurn()">Done!</button>
+        <!-- Drawing Phase -->
+        <div id="draw-ui" style="display:none; text-align: center;">
+            <div id="canvas-wrap">
+                <canvas id="canvas" width="600" height="450"></canvas>
+            </div>
+            <div style="margin-top: 15px;">
+                <button onclick="clearCanvas()" style="background:#475569">Clear</button>
+                <button onclick="submitDrawing()" style="background:#10b981">Submit Drawing</button>
+            </div>
         </div>
     </div>
 </div>
@@ -64,74 +78,92 @@
 <script src="/socket.io/socket.io.js"></script>
 <script>
     const socket = io();
-    const canvas = document.getElementById('paintCanvas');
+    let currentRoom = null;
+    const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
-    let isDrawing = false;
-    let myName = "";
+    let painting = false;
 
-    function showScreen(id) {
-        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-        document.getElementById(id).classList.add('active');
+    // --- NAVIGATION ---
+    function hostGame() {
+        const name = document.getElementById('username').value;
+        if (!name) return alert("Name required");
+        socket.emit('create-room', name);
     }
 
-    function joinLobby() {
-        myName = document.getElementById('username').value;
-        if (!myName) return alert("Pick a name!");
-        socket.emit('join-lobby', myName);
-        showScreen('lobby-screen');
+    function joinGame() {
+        const name = document.getElementById('username').value;
+        const code = document.getElementById('joinCode').value;
+        if (!name || !code) return alert("Name and Room ID required");
+        socket.emit('join-room', { roomId: code, username: name });
     }
 
-    socket.on('update-lobby', (players) => {
+    socket.on('room-created', (id) => {
+        currentRoom = id;
+        setupUI(id);
+    });
+
+    function setupUI(id) {
+        document.getElementById('landing').style.display = 'none';
+        document.getElementById('game-layout').style.display = 'grid';
+        document.getElementById('display-room-id').innerText = id;
+        document.getElementById('invite-link').innerText = `Room ID: ${id}`;
+    }
+
+    socket.on('update-players', (players) => {
         const list = document.getElementById('player-list');
-        list.innerHTML = "";
-        players.forEach(p => {
-            list.innerHTML += `<div class="player-card">${p.name} ${p.isHost ? '(Host)' : ''}</div>`;
-            if (p.id === socket.id && p.isHost) {
-                document.getElementById('start-btn').style.display = 'inline-block';
-                document.getElementById('lobby-status').innerText = "You are the host!";
-            }
-        });
+        list.innerHTML = players.map(p => `<div>• ${p.name} ${p.isHost ? '(Host)' : ''}</div>`).join('');
+        
+        const me = players.find(p => p.id === socket.id);
+        if (me?.isHost) document.getElementById('start-btn').style.display = 'block';
     });
 
-    function startGame() {
-        socket.emit('start-game');
+    // --- GAME PHASES ---
+    function requestStart() {
+        socket.emit('start-game', currentRoom);
     }
 
-    socket.on('game-phase', (data) => {
-        showScreen('game-screen');
-        document.getElementById('game-task').innerText = data.message;
+    socket.on('change-phase', (data) => {
+        document.getElementById('phase-instruction').innerText = data.msg;
+        document.getElementById('start-btn').style.display = 'none';
+        
+        if (data.phase === 'PROMPT') {
+            document.getElementById('prompt-ui').style.display = 'block';
+        } else if (data.phase === 'DRAW') {
+            document.getElementById('prompt-ui').style.display = 'none';
+            document.getElementById('draw-ui').style.display = 'block';
+        }
     });
 
-    // Drawing Logic
-    canvas.addEventListener('mousedown', startPos);
-    canvas.addEventListener('mouseup', endPos);
-    canvas.addEventListener('mousemove', draw);
+    function submitPrompt() {
+        const val = document.getElementById('prompt-input').value;
+        socket.emit('submit-data', { roomId: currentRoom, data: val, type: 'PROMPT' });
+        document.getElementById('prompt-ui').style.display = 'none';
+        document.getElementById('phase-instruction').innerText = "Waiting for others...";
+    }
 
-    function startPos(e) { isDrawing = true; draw(e); }
-    function endPos() { isDrawing = false; ctx.beginPath(); }
-    
-    function draw(e) {
-        if (!isDrawing) return;
+    function submitDrawing() {
+        const data = canvas.toDataURL();
+        socket.emit('submit-data', { roomId: currentRoom, data: data, type: 'IMAGE' });
+        document.getElementById('draw-ui').style.display = 'none';
+        document.getElementById('phase-instruction').innerText = "Waiting for others...";
+    }
+
+    // --- CANVAS LOGIC ---
+    canvas.addEventListener('mousedown', () => painting = true);
+    canvas.addEventListener('mouseup', () => { painting = false; ctx.beginPath(); });
+    canvas.addEventListener('mousemove', (e) => {
+        if (!painting) return;
         const rect = canvas.getBoundingClientRect();
-        ctx.lineWidth = 5;
+        ctx.lineWidth = 4;
         ctx.lineCap = 'round';
         ctx.strokeStyle = '#000';
         ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
         ctx.stroke();
         ctx.beginPath();
         ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
-    }
+    });
 
-    function clearCanvas() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-    }
-
-    function submitTurn() {
-        const img = canvas.toDataURL();
-        socket.emit('submit-turn', { image: img });
-        alert("Submitted! Waiting for others...");
-        clearCanvas();
-    }
+    function clearCanvas() { ctx.clearRect(0, 0, canvas.width, canvas.height); }
 </script>
 </body>
 </html>
