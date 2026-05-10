@@ -2,62 +2,83 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>SketchLink Multiplayer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SketchLink | Tuff Edition</title>
     <style>
-        :root { --bg: #0f172a; --card: #1e293b; --accent: #38bdf8; --btn: #0284c7; }
-        body { font-family: sans-serif; background: var(--bg); color: white; margin: 0; }
-        .container { max-width: 900px; margin: 0 auto; padding: 20px; text-align: center; }
-        #game-layout { display: none; grid-template-columns: 250px 1fr; height: 100vh; }
-        #sidebar { background: #0f172a; border-right: 1px solid #334155; padding: 20px; }
-        #game-zone { display: flex; flex-direction: column; align-items: center; justify-content: center; background: #1e293b; padding: 20px; }
+        :root { --bg: #0b0e14; --panel: #151921; --accent: #00d2ff; --primary: #3a86ff; }
+        body { font-family: 'Outfit', sans-serif; background: var(--bg); color: white; margin: 0; overflow: hidden; }
         
-        canvas { background: white; border-radius: 8px; cursor: crosshair; touch-action: none; }
-        .album-item { background: #334155; margin: 20px 0; padding: 15px; border-radius: 12px; }
-        .album-img { max-width: 100%; border-radius: 8px; margin-top: 10px; border: 2px solid white; }
-        .prompt-text { font-size: 24px; color: var(--accent); font-weight: bold; }
-        
-        input, button { padding: 12px; border-radius: 8px; border: none; font-size: 16px; margin: 5px; }
-        button { background: var(--btn); color: white; cursor: pointer; }
+        /* Animations */
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .fade-in { animation: fadeIn 0.5s ease forwards; }
+
+        /* Layout */
+        .container { display: flex; height: 100vh; }
+        #sidebar { width: 300px; background: var(--panel); border-right: 2px solid #222; padding: 25px; transition: 0.3s; }
+        #main { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; }
+
+        /* Landing/Lobby UI */
+        .card { background: var(--panel); padding: 40px; border-radius: 24px; box-shadow: 0 20px 50px rgba(0,0,0,0.5); text-align: center; }
+        input { background: #1b202b; border: 2px solid #2d3446; color: white; padding: 15px; border-radius: 12px; width: 280px; font-size: 18px; outline: none; transition: 0.2s; }
+        input:focus { border-color: var(--accent); }
+        button { background: var(--primary); color: white; border: none; padding: 15px 30px; border-radius: 12px; font-weight: 700; cursor: pointer; transition: 0.2s; margin: 10px; }
+        button:hover { transform: scale(1.05); filter: brightness(1.2); }
+        button:active { transform: scale(0.95); }
+
+        /* Drawing Canvas (BIGGER) */
+        #canvas-container { background: white; border-radius: 20px; overflow: hidden; box-shadow: 0 0 40px rgba(0,210,255,0.2); position: relative; }
+        canvas { cursor: crosshair; touch-action: none; display: block; }
+
+        /* Album Reveal */
+        #album-reveal { position: absolute; inset: 0; background: var(--bg); display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 100; }
+        .reveal-card { max-width: 800px; width: 90%; text-align: center; }
+        .reveal-img { max-width: 100%; border-radius: 20px; border: 4px solid white; box-shadow: 0 15px 40px rgba(0,0,0,0.6); display: none; }
+        .reveal-text { font-size: 48px; font-weight: 900; color: var(--accent); margin: 20px 0; display: none; }
     </style>
 </head>
 <body>
 
-<div id="landing" class="container">
-    <h1>SketchLink</h1>
-    <div style="background: var(--card); padding: 40px; border-radius: 20px;">
-        <input type="text" id="username" placeholder="Your Nickname"><br>
-        <button onclick="host()">Host Game</button>
-        <p>— OR —</p>
-        <input type="text" id="joinCode" placeholder="Room ID"><br>
-        <button onclick="join()" style="background:#475569">Join Room</button>
+<div class="container" id="game-container" style="display:none;">
+    <div id="sidebar">
+        <h1 style="color:var(--accent)">SketchLink</h1>
+        <p>Room ID: <b id="room-id-display"></b></p>
+        <div id="player-list"></div>
+        <button id="host-start" style="display:none; width:100%" onclick="playClick(); socket.emit('start-game', currentRoom)">Start Game</button>
+    </div>
+    <div id="main">
+        <h2 id="status-msg" class="fade-in">Waiting for host...</h2>
+        
+        <div id="ui-prompt" style="display:none" class="fade-in">
+            <input type="text" id="p-input" placeholder="Enter a wild prompt...">
+            <button onclick="playClick(); submitPrompt()">Send It</button>
+        </div>
+
+        <div id="ui-draw" style="display:none" class="fade-in">
+            <div id="canvas-container">
+                <canvas id="canvas" width="900" height="550"></canvas>
+            </div>
+            <button onclick="playClick(); ctx.clearRect(0,0,900,550)">Clear</button>
+            <button onclick="playClick(); submitDrawing()" style="background:#00f5d4; color:#000">Done!</button>
+        </div>
     </div>
 </div>
 
-<div id="game-layout">
-    <div id="sidebar">
-        <h3>Room: <span id="display-id">--</span></h3>
-        <div id="player-list"></div>
-        <button id="start-btn" style="display:none; width:100%" onclick="socket.emit('start-game', currentRoom)">Start Game</button>
+<div id="landing" class="main" style="height:100vh; display:flex; align-items:center; justify-content:center;">
+    <div class="card fade-in">
+        <h1 style="font-size:3rem; margin-bottom:10px">SketchLink</h1>
+        <p style="opacity:0.6">Multiplayer Drawing Mayhem</p>
+        <input type="text" id="username" placeholder="Nickname"><br>
+        <button onclick="playClick(); host()">Host Game</button>
+        <button onclick="playClick(); join()" style="background:#2d3446">Join Room</button>
+        <br><input type="text" id="joinCode" placeholder="Room ID" style="width:150px; margin-top:10px; font-size:14px;">
     </div>
+</div>
 
-    <div id="game-zone">
-        <h2 id="instruction">Waiting for players...</h2>
-        
-        <div id="prompt-ui" style="display:none">
-            <input type="text" id="p-input" placeholder="Enter a secret prompt...">
-            <button onclick="submitPrompt()">Submit</button>
-        </div>
-
-        <div id="draw-ui" style="display:none">
-            <canvas id="canvas" width="500" height="400"></canvas><br>
-            <button onclick="ctx.clearRect(0,0,500,400)">Clear</button>
-            <button onclick="submitDrawing()" style="background:#10b981">Finished</button>
-        </div>
-
-        <div id="results-ui" style="display:none; overflow-y: auto; width: 100%;">
-            <div id="album-container"></div>
-            <button onclick="location.reload()">Play Again</button>
-        </div>
+<div id="album-reveal">
+    <div class="reveal-card">
+        <div id="reveal-user" style="font-size:20px; opacity:0.5"></div>
+        <div id="reveal-text" class="reveal-text"></div>
+        <img id="reveal-img" class="reveal-img">
     </div>
 </div>
 
@@ -67,8 +88,24 @@
     let currentRoom = null;
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
-    let drawing = false;
+    let painting = false;
 
+    // --- AUDIO SYSTEM ---
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playClick() {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.1);
+    }
+
+    // --- GAME LOGIC ---
     function host() {
         const name = document.getElementById('username').value;
         if(name) socket.emit('create-room', name);
@@ -83,62 +120,91 @@
     socket.on('room-joined', (data) => {
         currentRoom = data.roomId;
         document.getElementById('landing').style.display = 'none';
-        document.getElementById('game-layout').style.display = 'grid';
-        document.getElementById('display-id').innerText = data.roomId;
-        updatePlayerList(data.players);
+        document.getElementById('game-container').style.display = 'flex';
+        document.getElementById('room-id-display').innerText = data.roomId;
     });
 
-    socket.on('update-players', (players) => updatePlayerList(players));
-
-    function updatePlayerList(players) {
-        const list = document.getElementById('player-list');
-        list.innerHTML = players.map(p => `<div>• ${p.name}</div>`).join('');
+    socket.on('update-players', (players) => {
+        document.getElementById('player-list').innerHTML = players.map(p => `<div class="fade-in" style="margin-bottom:8px">• ${p.name}</div>`).join('');
         const me = players.find(p => p.id === socket.id);
-        if(me?.isHost) document.getElementById('start-btn').style.display = 'block';
-    }
+        if(me?.isHost) document.getElementById('host-start').style.display = 'block';
+    });
 
     socket.on('change-phase', (data) => {
-        document.getElementById('instruction').innerText = data.msg;
-        document.getElementById('prompt-ui').style.display = data.phase === 'PROMPT' ? 'block' : 'none';
-        document.getElementById('draw-ui').style.display = data.phase === 'DRAW' ? 'block' : 'none';
-        
-        if (data.phase === 'RESULTS') {
-            showResults(data.album);
-        }
+        document.getElementById('status-msg').innerText = data.msg;
+        document.getElementById('ui-prompt').style.display = data.phase === 'PROMPT' ? 'block' : 'none';
+        document.getElementById('ui-draw').style.display = data.phase === 'DRAW' ? 'block' : 'none';
+        if(data.phase === 'RESULTS') startReveal(data.album);
     });
 
     function submitPrompt() {
         const val = document.getElementById('p-input').value;
         socket.emit('submit-data', { roomId: currentRoom, data: val, type: 'PROMPT' });
-        document.getElementById('prompt-ui').style.display = 'none';
+        document.getElementById('ui-prompt').style.display = 'none';
+        document.getElementById('status-msg').innerText = "Waiting for others...";
     }
 
     function submitDrawing() {
         socket.emit('submit-data', { roomId: currentRoom, data: canvas.toDataURL(), type: 'IMAGE' });
-        document.getElementById('draw-ui').style.display = 'none';
+        document.getElementById('ui-draw').style.display = 'none';
+        document.getElementById('status-msg').innerText = "Waiting for others...";
     }
 
-    function showResults(album) {
-        document.getElementById('results-ui').style.display = 'block';
-        const container = document.getElementById('album-container');
-        container.innerHTML = album.map(item => `
-            <div class="album-item">
-                <small>${item.user} sent:</small><br>
-                ${item.type === 'PROMPT' ? `<div class="prompt-text">"${item.content}"</div>` : `<img src="${item.content}" class="album-img">`}
-            </div>
-        `).join('');
-    }
-
-    // Drawing Logic
-    canvas.addEventListener('mousedown', () => drawing = true);
-    canvas.addEventListener('mouseup', () => { drawing = false; ctx.beginPath(); });
-    canvas.addEventListener('mousemove', (e) => {
-        if (!drawing) return;
+    // --- SMOOTH DRAWING (Tablet Optimized) ---
+    function getPos(e) {
         const rect = canvas.getBoundingClientRect();
-        ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.strokeStyle = '#000';
-        ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
-        ctx.stroke(); ctx.beginPath(); ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        return { x: clientX - rect.left, y: clientY - rect.top };
+    }
+
+    canvas.addEventListener('pointerdown', (e) => { painting = true; ctx.beginPath(); });
+    canvas.addEventListener('pointerup', () => painting = false);
+    canvas.addEventListener('pointermove', (e) => {
+        if (!painting) return;
+        const pos = getPos(e);
+        ctx.lineWidth = 4;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.strokeStyle = '#000';
+        ctx.lineTo(pos.x, pos.y);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(pos.x, pos.y);
     });
+
+    // --- TUFF REVEAL SYSTEM ---
+    async function startReveal(album) {
+        document.getElementById('album-reveal').style.display = 'flex';
+        const txt = document.getElementById('reveal-text');
+        const img = document.getElementById('reveal-img');
+        const user = document.getElementById('reveal-user');
+
+        for (let item of album) {
+            user.innerText = `${item.user}'s contribution:`;
+            user.style.display = 'block';
+            
+            if (item.type === 'PROMPT') {
+                txt.innerText = item.content;
+                txt.style.display = 'block';
+                img.style.display = 'none';
+                txt.classList.add('fade-in');
+            } else {
+                img.src = item.content;
+                img.style.display = 'block';
+                txt.style.display = 'none';
+                img.classList.add('fade-in');
+            }
+            
+            // Wait for dramatic effect
+            await new Promise(r => setTimeout(r, 3000));
+            txt.classList.remove('fade-in');
+            img.classList.remove('fade-in');
+        }
+        
+        user.innerText = "Game Over!";
+        setTimeout(() => location.reload(), 5000);
+    }
 </script>
 </body>
 </html>
