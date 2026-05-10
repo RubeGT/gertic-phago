@@ -5,44 +5,42 @@ const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, {
-    cors: { origin: "*" } // Allows connections from your Railway URL
-});
+const io = new Server(server, { cors: { origin: "*" } });
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Game State: Stores players and their sequence of drawings
 let players = [];
 let gameStarted = false;
 
 io.on('connection', (socket) => {
-    console.log('New player connected:', socket.id);
-
-    socket.on('join-game', (username) => {
-        players.push({ id: socket.id, name: username, currentTask: null });
-        io.emit('update-players', players);
+    socket.on('join-lobby', (username) => {
+        if (gameStarted) return socket.emit('error', 'Game already in progress');
+        
+        const newPlayer = { id: socket.id, name: username, isHost: players.length === 0 };
+        players.push(newPlayer);
+        
+        io.emit('update-lobby', players);
     });
 
-    // When a player finishes a drawing
-    socket.on('submit-drawing', (data) => {
-        // Find the next player in the list to send the drawing to
-        const currentIndex = players.findIndex(p => p.id === socket.id);
-        const nextIndex = (currentIndex + 1) % players.length;
-        const recipientId = players[nextIndex].id;
+    socket.on('start-game', () => {
+        const player = players.find(p => p.id === socket.id);
+        if (player && player.isHost) {
+            gameStarted = true;
+            io.emit('game-phase', { phase: 'DRAWING', message: 'Draw a secret object!' });
+        }
+    });
 
-        // Send the drawing to the next person for 'guessing'
-        io.to(recipientId).emit('new-task', {
-            type: 'guess',
-            image: data.image
-        });
+    socket.on('submit-turn', (data) => {
+        // Logic to rotate drawings/prompts goes here
+        socket.broadcast.emit('new-task', { image: data.image, type: 'GUESS' });
     });
 
     socket.on('disconnect', () => {
         players = players.filter(p => p.id !== socket.id);
-        io.emit('update-players', players);
+        if (players.length === 0) gameStarted = false;
+        io.emit('update-lobby', players);
     });
 });
 
-// Railway uses the PORT environment variable
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server live on port ${PORT}`));
+server.listen(PORT, () => console.log(`Server live on ${PORT}`));
