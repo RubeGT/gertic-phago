@@ -1,69 +1,137 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Railway Gartic Clone</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SketchChain Multiplayer</title>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; text-align: center; background: #2c3e50; color: white; }
-        canvas { background: white; border: 5px solid #bdc3c7; border-radius: 10px; cursor: crosshair; margin-top: 20px; }
-        .ui-panel { background: #34495e; padding: 20px; border-radius: 10px; display: inline-block; margin-top: 20px; }
-        button { padding: 10px 20px; font-size: 16px; cursor: pointer; background: #27ae60; color: white; border: none; border-radius: 5px; }
+        :root { --bg: #1a1a2e; --panel: #16213e; --accent: #e94560; --text: #e9ecef; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); color: var(--text); margin: 0; display: flex; height: 100vh; overflow: hidden; }
+        
+        /* Sidebar */
+        #sidebar { width: 250px; background: var(--panel); border-right: 2px solid #0f3460; padding: 20px; display: flex; flex-direction: column; }
+        .player-card { background: #0f3460; padding: 10px; margin-bottom: 10px; border-radius: 5px; border-left: 4px solid var(--accent); }
+
+        /* Main Area */
+        #main-content { flex-grow: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
+        .screen { display: none; width: 100%; max-width: 700px; text-align: center; }
+        .active { display: block; }
+
+        /* UI Elements */
+        input { padding: 12px; border-radius: 5px; border: none; width: 250px; margin-bottom: 10px; font-size: 16px; }
+        button { padding: 12px 24px; border-radius: 5px; border: none; background: var(--accent); color: white; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        button:hover { opacity: 0.8; transform: translateY(-2px); }
+        button:disabled { background: #555; cursor: not-allowed; }
+
+        /* Canvas */
+        canvas { background: white; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); cursor: crosshair; touch-action: none; }
     </style>
 </head>
 <body>
-    <h1>Sketch Chain</h1>
-    <div id="setup">
-        <input type="text" id="nameInput" placeholder="Enter Username">
-        <button onclick="join()">Join Game</button>
+
+<div id="sidebar">
+    <h3>Players</h3>
+    <div id="player-list"></div>
+</div>
+
+<div id="main-content">
+    <!-- Screen 1: Login -->
+    <div id="login-screen" class="screen active">
+        <h1>SketchChain</h1>
+        <p>Enter your nickname to join the lobby</p>
+        <input type="text" id="username" placeholder="SuperPainter4000"><br>
+        <button onclick="joinLobby()">Join Lobby</button>
     </div>
 
-    <div id="game-area" style="display:none;">
-        <h3 id="instruction">Draw something!</h3>
-        <canvas id="canvas" width="500" height="400"></canvas><br>
-        <button onclick="submit()">Finish Drawing</button>
+    <!-- Screen 2: Lobby -->
+    <div id="lobby-screen" class="screen">
+        <h1>Waiting Room</h1>
+        <p id="lobby-status">Waiting for host to start...</p>
+        <button id="start-btn" onclick="startGame()" style="display:none;">Start Game</button>
     </div>
 
-    <script src="/socket.io/socket.io.js"></script>
-    <script>
-        const socket = io();
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
-        let drawing = false;
+    <!-- Screen 3: Drawing -->
+    <div id="game-screen" class="screen">
+        <h2 id="game-task">Draw: A Scary Cat</h2>
+        <canvas id="paintCanvas" width="600" height="450"></canvas>
+        <div style="margin-top: 15px;">
+            <button onclick="clearCanvas()" style="background:#555">Clear</button>
+            <button onclick="submitTurn()">Done!</button>
+        </div>
+    </div>
+</div>
 
-        function join() {
-            const name = document.getElementById('nameInput').value;
-            if(!name) return alert("Enter a name!");
-            socket.emit('join-game', name);
-            document.getElementById('setup').style.display = 'none';
-            document.getElementById('game-area').style.display = 'block';
-        }
+<script src="/socket.io/socket.io.js"></script>
+<script>
+    const socket = io();
+    const canvas = document.getElementById('paintCanvas');
+    const ctx = canvas.getContext('2d');
+    let isDrawing = false;
+    let myName = "";
 
-        // Canvas Drawing Logic
-        canvas.addEventListener('mousedown', () => drawing = true);
-        canvas.addEventListener('mouseup', () => { drawing = false; ctx.beginPath(); });
-        canvas.addEventListener('mousemove', (e) => {
-            if (!drawing) return;
-            ctx.lineWidth = 4;
-            ctx.lineCap = 'round';
-            ctx.strokeStyle = '#000';
-            ctx.lineTo(e.clientX - canvas.offsetLeft, e.clientY - canvas.offsetTop);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(e.clientX - canvas.offsetLeft, e.clientY - canvas.offsetTop);
-        });
+    function showScreen(id) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+    }
 
-        function submit() {
-            const data = canvas.toDataURL();
-            socket.emit('submit-drawing', { image: data });
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            document.getElementById('instruction').innerText = "Waiting for next turn...";
-        }
+    function joinLobby() {
+        myName = document.getElementById('username').value;
+        if (!myName) return alert("Pick a name!");
+        socket.emit('join-lobby', myName);
+        showScreen('lobby-screen');
+    }
 
-        socket.on('new-task', (data) => {
-            if(data.type === 'guess') {
-                document.getElementById('instruction').innerText = "Someone sent you this! What is it?";
-                // You could display the image in an <img> tag here
+    socket.on('update-lobby', (players) => {
+        const list = document.getElementById('player-list');
+        list.innerHTML = "";
+        players.forEach(p => {
+            list.innerHTML += `<div class="player-card">${p.name} ${p.isHost ? '(Host)' : ''}</div>`;
+            if (p.id === socket.id && p.isHost) {
+                document.getElementById('start-btn').style.display = 'inline-block';
+                document.getElementById('lobby-status').innerText = "You are the host!";
             }
         });
-    </script>
+    });
+
+    function startGame() {
+        socket.emit('start-game');
+    }
+
+    socket.on('game-phase', (data) => {
+        showScreen('game-screen');
+        document.getElementById('game-task').innerText = data.message;
+    });
+
+    // Drawing Logic
+    canvas.addEventListener('mousedown', startPos);
+    canvas.addEventListener('mouseup', endPos);
+    canvas.addEventListener('mousemove', draw);
+
+    function startPos(e) { isDrawing = true; draw(e); }
+    function endPos() { isDrawing = false; ctx.beginPath(); }
+    
+    function draw(e) {
+        if (!isDrawing) return;
+        const rect = canvas.getBoundingClientRect();
+        ctx.lineWidth = 5;
+        ctx.lineCap = 'round';
+        ctx.strokeStyle = '#000';
+        ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+    }
+
+    function clearCanvas() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    function submitTurn() {
+        const img = canvas.toDataURL();
+        socket.emit('submit-turn', { image: img });
+        alert("Submitted! Waiting for others...");
+        clearCanvas();
+    }
+</script>
 </body>
 </html>
